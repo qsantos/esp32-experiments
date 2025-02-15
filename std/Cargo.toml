@@ -1,0 +1,35 @@
+[package]
+name = "std"
+version = "0.1.0"
+authors = ["Quentin Santos <qsantos@qsantos.fr>"]
+edition = "2021"
+resolver = "2"
+rust-version = "1.77"
+
+[[bin]]
+name = "std"
+harness = false # do not use the built in cargo test harness -> resolve rust-analyzer errors
+
+[profile.release]
+opt-level = "s"
+
+[profile.dev]
+debug = true    # Symbols are nice and they don't increase the size on Flash
+opt-level = "z"
+
+[features]
+default = []
+
+experimental = ["esp-idf-svc/experimental"]
+
+[dependencies]
+anyhow = "1.0.95"
+esp-idf-hal = "0.45.2"
+#esp-idf-hal = "0.45.2"
+#esp-idf-svc = { version = "0.51", features = ["critical-section", "embassy-time-driver", "embassy-sync"] }
+esp-idf-svc = { version = "0.51", features = ["embassy-time-driver", "embassy-sync"] }
+log = "0.4.25"
+#esp-hal = { version = "0.23.1", features = ["esp32s2"] }
+
+[build-dependencies]
+embuild = "0.33"
