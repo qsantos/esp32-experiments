@@ -15,11 +15,11 @@ use static_cell::StaticCell;
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
     let peripherals = esp_hal::init(Default::default());
-    let mut uart1 = Uart::new(peripherals.UART1, Config::default())
+    let mut uart0 = Uart::new(peripherals.UART0, Config::default())
         .unwrap()
-        .with_rx(peripherals.GPIO1)
-        .with_tx(peripherals.GPIO2);
-    uart1
+        .with_rx(peripherals.GPIO18)
+        .with_tx(peripherals.GPIO16);
+    uart0
         .write_bytes(info.location().unwrap().file().as_bytes())
         .unwrap();
     loop {}
