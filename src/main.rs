@@ -12,6 +12,8 @@ use esp_hal::uart::{Config, Uart};
 use gpio::{Level, Output};
 use static_cell::StaticCell;
 
+use core::fmt::Write;
+
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
     let peripherals = esp_hal::init(Default::default());
@@ -19,9 +21,7 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
         .unwrap()
         .with_rx(peripherals.GPIO18)
         .with_tx(peripherals.GPIO16);
-    uart0
-        .write_bytes(info.location().unwrap().file().as_bytes())
-        .unwrap();
+    write!(uart0, "{}", info.location().unwrap().file()).unwrap();
     loop {}
 }
 
@@ -49,7 +49,7 @@ async fn main(_spawner: Spawner) {
         .with_tx(peripherals.GPIO16);
     let delay = Delay::new();
     loop {
-        uart0.write_bytes(b"Hello, world!\r\n").unwrap();
+        write!(uart0, "Hello, world!\r\n").unwrap();
         delay.delay_millis(500u32);
         led.toggle();
     }
