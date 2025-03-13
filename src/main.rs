@@ -21,7 +21,16 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
         .unwrap()
         .with_rx(peripherals.GPIO18)
         .with_tx(peripherals.GPIO16);
-    write!(uart0, "{}", info.location().unwrap().file()).unwrap();
+    if let Some(location) = info.location() {
+        write!(uart0, "panicked at {}:\r\n{}\r\n", location, info.message()).unwrap();
+    } else {
+        write!(
+            uart0,
+            "Panic at unknown location:\r\n{}\r\n",
+            info.message()
+        )
+        .unwrap();
+    }
     loop {}
 }
 
