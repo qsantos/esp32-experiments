@@ -43,13 +43,13 @@ async fn main(_spawner: Spawner) {
 
     blink(&mut led, 10);
 
-    let mut uart1 = Uart::new(peripherals.UART0, Config::default())
+    let mut uart0 = Uart::new(peripherals.UART0, Config::default())
         .unwrap()
         .with_rx(peripherals.GPIO18)
         .with_tx(peripherals.GPIO16);
     let delay = Delay::new();
     loop {
-        uart1.write_bytes(b"Hello, world!\r\n").unwrap();
+        uart0.write_bytes(b"Hello, world!\r\n").unwrap();
         delay.delay_millis(500u32);
         led.toggle();
     }
