@@ -25,8 +25,12 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
 
 fn blink(led: &mut Output, times: u32) {
     let delay = Delay::new();
-    delay.delay_millis(1000u32);
-    for _ in 0..times {
+    if times != 0 {
+        delay.delay_millis(100u32);
+        led.toggle();
+        delay.delay_millis(100u32);
+    }
+    for _ in 1..times {
         led.toggle();
         delay.delay_millis(100u32);
         led.toggle();
