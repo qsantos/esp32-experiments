@@ -22,16 +22,7 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
         .unwrap()
         .with_rx(peripherals.GPIO37)
         .with_tx(peripherals.GPIO39);
-    if let Some(location) = info.location() {
-        write!(uart0, "panicked at {}:\r\n{}\r\n", location, info.message()).unwrap();
-    } else {
-        write!(
-            uart0,
-            "Panic at unknown location:\r\n{}\r\n",
-            info.message()
-        )
-        .unwrap();
-    }
+    write!(uart0, "{}", info).unwrap();
     loop {}
 }
 
@@ -59,7 +50,7 @@ async fn main(_spawner: Spawner) {
         .with_tx(peripherals.GPIO39);
     let delay = Delay::new();
     loop {
-        write!(uart0, "Hello, world!\r\n").unwrap();
+        writeln!(uart0, "Hello, world!").unwrap();
         delay.delay_millis(500u32);
         led.toggle();
     }
