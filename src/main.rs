@@ -2,6 +2,7 @@
 #![no_main]
 
 use embassy_executor::Spawner;
+use embassy_futures::join::join;
 use embassy_time::Timer;
 use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
 use esp_hal::delay::Delay;
@@ -49,30 +50,29 @@ async fn main(_spawner: Spawner) {
     esp_println::logger::init_logger(log::LevelFilter::Debug);
 
     let mut led = Output::new(peripherals.GPIO15, Level::Low);
+    blink(&mut led, 1);
 
-    blink(&mut led, 10);
-
-    let delay = Delay::new();
-    loop {
-        println!("Hello, world!");
-        delay.delay_millis(500u32);
-        led.toggle();
-    }
+    let timg0 = esp_hal::timer::timg::TimerGroup::new(peripherals.TIMG0);
+    esp_hal_embassy::init(timg0.timer0);
 
     let usb = Usb::new(peripherals.USB0, peripherals.GPIO20, peripherals.GPIO19);
     static DRIVER_BUFFER: StaticCell<[u8; 1024]> = StaticCell::new();
     let config = Default::default();
     let driver = Driver::new(usb, DRIVER_BUFFER.init([0; 1024]), config);
 
-    blink(&mut led, 1);
-
     let config = {
         let mut config = embassy_usb::Config::new(0xc0de, 0xcafe);
         config.manufacturer = Some("AAAAAAAAAA");
         config.product = Some("BBBBBBBBBB");
         config.serial_number = Some("12345678");
-        config.max_power = 100;
-        config.max_packet_size_0 = 64;
+        //config.max_power = 100;
+        //config.max_packet_size_0 = 64;
+        //??
+        //https://github.com/esp-rs/esp-hal/blob/main/examples/src/bin/embassy_usb_serial.rs
+        config.device_class = 0xEF;
+        config.device_sub_class = 0x02;
+        config.device_protocol = 0x01;
+        config.composite_with_iads = true;
         config
     };
 
@@ -93,32 +93,28 @@ async fn main(_spawner: Spawner) {
         builder
     };
 
-    blink(&mut led, 2);
-
-    //// Create classes on the builder.
-    //let class = {
-    //    static STATE: StaticCell<State> = StaticCell::new();
-    //    let state = STATE.init(State::new());
-    //    CdcAcmClass::new(&mut builder, state, 64)
-    //};
+    // Create classes on the builder.
+    let _class = {
+        static STATE: StaticCell<State> = StaticCell::new();
+        let state = STATE.init(State::new());
+        CdcAcmClass::new(&mut builder, state, 64)
+    };
 
     // Build the builder.
     let mut usb = builder.build();
 
-    blink(&mut led, 3);
-
     // Run the USB device.
-    //spawner.spawn(usb_task(usb)).unwrap();
-    usb.run().await;
+    let usb_fut = usb.run();
 
-    blink(&mut led, 4);
+    let blinker = async {
+        loop {
+            led.set_high();
+            Timer::after_secs(1).await;
 
-    loop {
-        led.set_high();
-        //Not working
-        //Timer::after_secs(1).await;
+            led.set_low();
+            Timer::after_secs(1).await;
+        }
+    };
 
-        led.set_low();
-        //Timer::after_secs(1).await;
-    }
+    join(blinker, usb_fut).await;
 }
