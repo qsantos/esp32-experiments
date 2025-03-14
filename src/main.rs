@@ -43,6 +43,9 @@ async fn main(_spawner: Spawner) {
         .with_rx(peripherals.GPIO37)
         .with_tx(peripherals.GPIO39);
 
+    // enable logging
+    esp_println::logger::init_logger(log::LevelFilter::Debug);
+
     let mut led = Output::new(peripherals.GPIO15, Level::Low);
 
     blink(&mut led, 10);

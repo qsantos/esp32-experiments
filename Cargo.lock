@@ -750,6 +750,7 @@ dependencies = [
  "esp-hal",
  "esp-hal-embassy",
  "esp-println",
+ "log",
  "static_cell",
 ]
 
