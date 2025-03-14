@@ -286,6 +286,7 @@ dependencies = [
  "critical-section",
  "embassy-sync",
  "embassy-usb-driver",
+ "log",
 ]
 
 [[package]]
@@ -752,6 +753,7 @@ dependencies = [
  "embassy-executor",
  "embassy-time",
  "embassy-usb",
+ "embassy-usb-synopsys-otg",
  "esp-hal",
  "esp-hal-embassy",
  "esp-println",
