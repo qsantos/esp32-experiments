@@ -16,6 +16,7 @@ use core::fmt::Write;
 
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
+    // TODO: this does not work once peripherals are initialized in main()
     let peripherals = esp_hal::init(Default::default());
     let mut uart0 = Uart::new(peripherals.UART0, Config::default())
         .unwrap()
