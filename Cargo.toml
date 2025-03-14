@@ -3,6 +3,11 @@ edition = "2021"
 name    = "no_std"
 version = "0.1.0"
 
+# Fix for `cargo check --tests` and `cargo clippy --tests` in no_std
+[[bin]]
+name = "no_std"
+harness = false
+
 [dependencies]
 embassy-executor = { version = "0.7.0", features = ["executor-thread"] }
 embassy-time = "0.4.0"
