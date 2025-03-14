@@ -18,6 +18,8 @@ use core::fmt::Write;
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
     println!("{}", info);
+    println!("Resetting");
+    esp_hal::reset::software_reset();
     loop {}
 }
 
