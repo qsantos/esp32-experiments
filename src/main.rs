@@ -9,6 +9,7 @@ use esp_hal::gpio;
 use esp_hal::otg_fs::asynch::Driver;
 use esp_hal::otg_fs::Usb;
 use esp_hal::uart::{Config, Uart};
+use esp_println::println;
 use gpio::{Level, Output};
 use static_cell::StaticCell;
 
@@ -16,13 +17,7 @@ use core::fmt::Write;
 
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
-    // TODO: this does not work once peripherals are initialized in main()
-    let peripherals = esp_hal::init(Default::default());
-    let mut uart0 = Uart::new(peripherals.UART0, Config::default())
-        .unwrap()
-        .with_rx(peripherals.GPIO37)
-        .with_tx(peripherals.GPIO39);
-    write!(uart0, "{}", info).unwrap();
+    println!("{}", info);
     loop {}
 }
 
@@ -40,17 +35,19 @@ fn blink(led: &mut Output, times: u32) {
 #[esp_hal_embassy::main]
 async fn main(_spawner: Spawner) {
     let peripherals = esp_hal::init(Default::default());
+    // set UART0 first thing, we can send logs and panic messages
+    Uart::new(peripherals.UART0, Config::default())
+        .unwrap()
+        .with_rx(peripherals.GPIO37)
+        .with_tx(peripherals.GPIO39);
+
     let mut led = Output::new(peripherals.GPIO15, Level::Low);
 
     blink(&mut led, 10);
 
-    let mut uart0 = Uart::new(peripherals.UART0, Config::default())
-        .unwrap()
-        .with_rx(peripherals.GPIO37)
-        .with_tx(peripherals.GPIO39);
     let delay = Delay::new();
     loop {
-        writeln!(uart0, "Hello, world!").unwrap();
+        println!("Hello, world!");
         delay.delay_millis(500u32);
         led.toggle();
     }
