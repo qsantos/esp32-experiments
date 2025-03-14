@@ -13,8 +13,6 @@ use esp_println::println;
 use gpio::{Level, Output};
 use static_cell::StaticCell;
 
-use core::fmt::Write;
-
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
     println!("{}", info);
