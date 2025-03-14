@@ -19,8 +19,8 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
     let peripherals = esp_hal::init(Default::default());
     let mut uart0 = Uart::new(peripherals.UART0, Config::default())
         .unwrap()
-        .with_rx(peripherals.GPIO18)
-        .with_tx(peripherals.GPIO16);
+        .with_rx(peripherals.GPIO37)
+        .with_tx(peripherals.GPIO39);
     if let Some(location) = info.location() {
         write!(uart0, "panicked at {}:\r\n{}\r\n", location, info.message()).unwrap();
     } else {
@@ -54,8 +54,8 @@ async fn main(_spawner: Spawner) {
 
     let mut uart0 = Uart::new(peripherals.UART0, Config::default())
         .unwrap()
-        .with_rx(peripherals.GPIO18)
-        .with_tx(peripherals.GPIO16);
+        .with_rx(peripherals.GPIO37)
+        .with_tx(peripherals.GPIO39);
     let delay = Delay::new();
     loop {
         write!(uart0, "Hello, world!\r\n").unwrap();
