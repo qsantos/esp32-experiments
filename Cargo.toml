@@ -9,11 +9,11 @@ name = "no_std"
 harness = false
 
 [dependencies]
-embassy-executor = { version = "0.7.0", features = ["executor-thread"] }
-embassy-time = "0.4.0"
-embassy-usb = "0.4.0"
-esp-hal = { version = "0.23.1", features = ["esp32s2", "unstable"] }
-esp-hal-embassy = { version = "0.6.0", features = ["esp32s2"] }
+embassy-executor = { version = "0.7.0", features = ["executor-thread", "log"] }
+embassy-time = { version = "0.4.0", features = ["log"] }
+embassy-usb = { version = "0.4.0", features = ["log"] }
+esp-hal = { version = "0.23.1", features = ["esp32s2", "log", "unstable"] }
+esp-hal-embassy = { version = "0.6.0", features = ["esp32s2", "log"] }
 esp-println = { version = "0.13.1", default-features = false, features = ["colors", "esp32s2", "log", "uart"] }
 log = "0.4.26"
 static_cell = "2.1.0"

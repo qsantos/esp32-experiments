@@ -167,6 +167,7 @@ dependencies = [
  "critical-section",
  "document-features",
  "embassy-executor-macros",
+ "log",
 ]
 
 [[package]]
@@ -232,6 +233,7 @@ dependencies = [
  "embedded-hal 1.0.0",
  "embedded-hal-async",
  "futures-util",
+ "log",
 ]
 
 [[package]]
@@ -264,6 +266,7 @@ dependencies = [
  "embassy-sync",
  "embassy-usb-driver",
  "heapless",
+ "log",
  "ssmarshal",
  "usbd-hid",
 ]
@@ -460,6 +463,7 @@ dependencies = [
  "esp32s2",
  "fugit",
  "instability",
+ "log",
  "nb 1.1.0",
  "paste",
  "portable-atomic",
@@ -492,6 +496,7 @@ dependencies = [
  "esp-hal",
  "esp-hal-procmacros",
  "esp-metadata",
+ "log",
  "portable-atomic",
  "static_cell",
 ]
