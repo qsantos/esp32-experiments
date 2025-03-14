@@ -62,9 +62,9 @@ async fn main(_spawner: Spawner) {
     }
 
     let usb = Usb::new(peripherals.USB0, peripherals.GPIO20, peripherals.GPIO19);
-    static DRIVER_BUFFER: StaticCell<[u8; 64]> = StaticCell::new();
+    static DRIVER_BUFFER: StaticCell<[u8; 1024]> = StaticCell::new();
     let config = Default::default();
-    let driver = Driver::new(usb, DRIVER_BUFFER.init([0; 64]), config);
+    let driver = Driver::new(usb, DRIVER_BUFFER.init([0; 1024]), config);
 
     blink(&mut led, 1);
 
