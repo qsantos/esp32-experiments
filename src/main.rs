@@ -14,7 +14,7 @@ use esp_hal::otg_fs::Usb;
 use esp_hal::uart::{Config, Uart};
 use esp_println::println;
 use gpio::{Level, Output};
-use usbd_hid::descriptor::{KeyboardReport, SerializedDescriptor};
+use usbd_hid::descriptor::{KeyboardReport, KeyboardUsage, SerializedDescriptor};
 
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
@@ -48,6 +48,19 @@ async fn echo_loop<'a>(
         buf.make_ascii_uppercase();
         class.write_packet(&buf[..n]).await?;
     }
+}
+
+#[repr(u8)]
+#[allow(unused)]
+enum KeyboardModifier {
+    LeftControl = 0x01,
+    LeftShift = 0x02,
+    LeftAlt = 0x04,
+    LeftGui = 0x08,
+    RightControl = 0x10,
+    RightShift = 0x20,
+    RightAlt = 0x40,
+    RightGui = 0x80,
 }
 
 #[esp_hal_embassy::main]
@@ -131,6 +144,14 @@ async fn main(_spawner: Spawner) {
 
     let hid_fut = async {
         loop {
+            // press A
+            let mut report = KeyboardReport::default();
+            report.keycodes[0] = KeyboardUsage::KeyboardAa as u8;
+            report.modifier |= KeyboardModifier::LeftShift as u8;
+            if let Err(EndpointError::BufferOverflow) = hid_class.write_serialize(&report).await {
+                panic!("Buffer overflow");
+            }
+            // release A
             let report = KeyboardReport::default();
             if let Err(EndpointError::BufferOverflow) = hid_class.write_serialize(&report).await {
                 panic!("Buffer overflow");
