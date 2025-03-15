@@ -67,8 +67,8 @@ async fn main(_spawner: Spawner) {
         config.serial_number = Some("12345678");
         //config.max_power = 100;
         //config.max_packet_size_0 = 64;
-        //??
-        //https://github.com/esp-rs/esp-hal/blob/main/examples/src/bin/embassy_usb_serial.rs
+        // Required for compatibility with Windows 7
+        // https://developer.nordicsemi.com/nRF_Connect_SDK/doc/1.9.1/kconfig/CONFIG_CDC_ACM_IAD.html#help
         config.device_class = 0xEF;
         config.device_sub_class = 0x02;
         config.device_protocol = 0x01;
