@@ -2,9 +2,10 @@
 #![no_main]
 
 use embassy_executor::Spawner;
-use embassy_futures::join::join;
+use embassy_futures::join::join3;
 use embassy_time::Timer;
 use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
+use embassy_usb::driver::EndpointError;
 use esp_hal::delay::Delay;
 use esp_hal::gpio;
 use esp_hal::otg_fs::asynch::Driver;
@@ -86,7 +87,7 @@ async fn main(_spawner: Spawner) {
     };
 
     // Create classes on the builder.
-    let _class = {
+    let mut class = {
         static STATE: StaticCell<State> = StaticCell::new();
         let state = STATE.init(State::new());
         CdcAcmClass::new(&mut builder, state, 64)
@@ -98,6 +99,24 @@ async fn main(_spawner: Spawner) {
     // Run the USB device.
     let usb_fut = usb.run();
 
+    let echo_fut = async {
+        loop {
+            class.wait_connection().await;
+            println!("Connected");
+            loop {
+                let mut buf = [0; 64];
+                let n = match class.read_packet(&mut buf).await {
+                    Ok(n) => n,
+                    Err(EndpointError::Disabled) => break,
+                    Err(EndpointError::BufferOverflow) => panic!("Buffer overflow"),
+                };
+                buf.make_ascii_uppercase();
+                class.write_packet(&buf[..n]).await.unwrap();
+            }
+            println!("Disconnected");
+        }
+    };
+
     let blinker = async {
         loop {
             led.set_high();
@@ -108,5 +127,5 @@ async fn main(_spawner: Spawner) {
         }
     };
 
-    join(blinker, usb_fut).await;
+    join3(usb_fut, echo_fut, blinker).await;
 }
