@@ -2,9 +2,10 @@
 #![no_main]
 
 use embassy_executor::Spawner;
-use embassy_futures::join::join3;
+use embassy_futures::join::join4;
 use embassy_time::Timer;
-use embassy_usb::class::cdc_acm::{CdcAcmClass, State};
+use embassy_usb::class::cdc_acm::{self, CdcAcmClass};
+use embassy_usb::class::hid::{self, HidWriter};
 use embassy_usb::driver::EndpointError;
 use esp_hal::delay::Delay;
 use esp_hal::gpio;
@@ -13,6 +14,7 @@ use esp_hal::otg_fs::Usb;
 use esp_hal::uart::{Config, Uart};
 use esp_println::println;
 use gpio::{Level, Output};
+use usbd_hid::descriptor::{KeyboardReport, SerializedDescriptor};
 
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
@@ -37,7 +39,9 @@ fn blink(led: &mut Output, times: u32) {
     }
 }
 
-async fn echo_loop<'a>(class: &mut CdcAcmClass<'a, Driver<'a>>) -> Result<(), EndpointError> {
+async fn echo_loop<'a>(
+    class: &mut cdc_acm::CdcAcmClass<'a, Driver<'a>>,
+) -> Result<(), EndpointError> {
     let mut buf = [0; 64];
     loop {
         let n = class.read_packet(&mut buf).await?;
@@ -78,7 +82,8 @@ async fn main(_spawner: Spawner) {
     };
 
     // We need to declare the state before the builder to ensure it is dropped after the builder.
-    let mut state = State::new();
+    let mut echo_state = cdc_acm::State::new();
+    let mut hid_state = hid::State::new();
 
     // Create embassy-usb DeviceBuilder using the driver and config.
     // It needs some buffers for building the descriptors.
@@ -95,7 +100,17 @@ async fn main(_spawner: Spawner) {
     );
 
     // Create classes on the builder.
-    let mut class = CdcAcmClass::new(&mut builder, &mut state, 64);
+    let mut echo_class = CdcAcmClass::new(&mut builder, &mut echo_state, 64);
+    let mut hid_class: HidWriter<_, 16> = HidWriter::new(
+        &mut builder,
+        &mut hid_state,
+        hid::Config {
+            report_descriptor: KeyboardReport::desc(),
+            request_handler: None,
+            poll_ms: 10,
+            max_packet_size: 64,
+        },
+    );
 
     // Build the builder.
     let mut usb = builder.build();
@@ -105,12 +120,22 @@ async fn main(_spawner: Spawner) {
 
     let echo_fut = async {
         loop {
-            class.wait_connection().await;
+            echo_class.wait_connection().await;
             println!("Connected");
-            if let Err(EndpointError::BufferOverflow) = echo_loop(&mut class).await {
+            if let Err(EndpointError::BufferOverflow) = echo_loop(&mut echo_class).await {
                 panic!("Buffer overflow");
             }
             println!("Disconnected");
+        }
+    };
+
+    let hid_fut = async {
+        loop {
+            let report = KeyboardReport::default();
+            if let Err(EndpointError::BufferOverflow) = hid_class.write_serialize(&report).await {
+                panic!("Buffer overflow");
+            }
+            Timer::after_secs(1).await;
         }
     };
 
@@ -124,5 +149,5 @@ async fn main(_spawner: Spawner) {
         }
     };
 
-    join3(usb_fut, echo_fut, blinker).await;
+    join4(usb_fut, echo_fut, blinker, hid_fut).await;
 }
