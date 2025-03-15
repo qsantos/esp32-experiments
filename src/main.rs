@@ -38,6 +38,15 @@ fn blink(led: &mut Output, times: u32) {
     }
 }
 
+async fn echo_loop<'a>(class: &mut CdcAcmClass<'a, Driver<'a>>) -> Result<(), EndpointError> {
+    let mut buf = [0; 64];
+    loop {
+        let n = class.read_packet(&mut buf).await?;
+        buf.make_ascii_uppercase();
+        class.write_packet(&buf[..n]).await?;
+    }
+}
+
 #[esp_hal_embassy::main]
 async fn main(_spawner: Spawner) {
     let peripherals = esp_hal::init(Default::default());
@@ -103,15 +112,8 @@ async fn main(_spawner: Spawner) {
         loop {
             class.wait_connection().await;
             println!("Connected");
-            loop {
-                let mut buf = [0; 64];
-                let n = match class.read_packet(&mut buf).await {
-                    Ok(n) => n,
-                    Err(EndpointError::Disabled) => break,
-                    Err(EndpointError::BufferOverflow) => panic!("Buffer overflow"),
-                };
-                buf.make_ascii_uppercase();
-                class.write_packet(&buf[..n]).await.unwrap();
+            if let Err(EndpointError::BufferOverflow) = echo_loop(&mut class).await {
+                 panic!("Buffer overflow");
             }
             println!("Disconnected");
         }
