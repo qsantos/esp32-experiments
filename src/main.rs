@@ -65,8 +65,6 @@ async fn main(_spawner: Spawner) {
         config.manufacturer = Some("AAAAAAAAAA");
         config.product = Some("BBBBBBBBBB");
         config.serial_number = Some("12345678");
-        //config.max_power = 100;
-        //config.max_packet_size_0 = 64;
         config
     };
 
