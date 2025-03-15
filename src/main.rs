@@ -13,7 +13,6 @@ use esp_hal::otg_fs::Usb;
 use esp_hal::uart::{Config, Uart};
 use esp_println::println;
 use gpio::{Level, Output};
-use static_cell::StaticCell;
 
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
@@ -66,9 +65,9 @@ async fn main(_spawner: Spawner) {
     esp_hal_embassy::init(timg0.timer0);
 
     let usb = Usb::new(peripherals.USB0, peripherals.GPIO20, peripherals.GPIO19);
-    static DRIVER_BUFFER: StaticCell<[u8; 1024]> = StaticCell::new();
+    let mut driver_buffer = [0; 1024];
     let config = Default::default();
-    let driver = Driver::new(usb, DRIVER_BUFFER.init([0; 1024]), config);
+    let driver = Driver::new(usb, &mut driver_buffer, config);
 
     let config = {
         let mut config = embassy_usb::Config::new(0xc0de, 0xcafe);
@@ -78,29 +77,25 @@ async fn main(_spawner: Spawner) {
         config
     };
 
+    // We need to declare the state before the builder to ensure it is dropped after the builder.
+    let mut state = State::new();
+
     // Create embassy-usb DeviceBuilder using the driver and config.
     // It needs some buffers for building the descriptors.
-    let mut builder = {
-        static CONFIG_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
-        static BOS_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
-        static CONTROL_BUF: StaticCell<[u8; 64]> = StaticCell::new();
-        let builder = embassy_usb::Builder::new(
-            driver,
-            config,
-            CONFIG_DESCRIPTOR.init([0; 256]),
-            BOS_DESCRIPTOR.init([0; 256]),
-            &mut [], // no msos descriptors
-            CONTROL_BUF.init([0; 64]),
-        );
-        builder
-    };
+    let mut config_descriptor = [0; 256];
+    let mut bos_descriptor = [0; 256];
+    let mut control_buf = [0; 64];
+    let mut builder = embassy_usb::Builder::new(
+        driver,
+        config,
+        &mut config_descriptor,
+        &mut bos_descriptor,
+        &mut [], // no msos descriptors
+        &mut control_buf,
+    );
 
     // Create classes on the builder.
-    let mut class = {
-        static STATE: StaticCell<State> = StaticCell::new();
-        let state = STATE.init(State::new());
-        CdcAcmClass::new(&mut builder, state, 64)
-    };
+    let mut class = CdcAcmClass::new(&mut builder, &mut state, 64);
 
     // Build the builder.
     let mut usb = builder.build();
@@ -113,7 +108,7 @@ async fn main(_spawner: Spawner) {
             class.wait_connection().await;
             println!("Connected");
             if let Err(EndpointError::BufferOverflow) = echo_loop(&mut class).await {
-                 panic!("Buffer overflow");
+                panic!("Buffer overflow");
             }
             println!("Disconnected");
         }
