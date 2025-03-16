@@ -146,8 +146,8 @@ async fn main(_spawner: Spawner) {
         loop {
             // press A
             let mut report = KeyboardReport::default();
-            report.keycodes[0] = KeyboardUsage::KeyboardAa as u8;
-            report.modifier |= KeyboardModifier::LeftShift as u8;
+            //report.keycodes[0] = KeyboardUsage::KeyboardAa as u8;
+            //report.modifier |= KeyboardModifier::LeftShift as u8;
             if let Err(EndpointError::BufferOverflow) = hid_class.write_serialize(&report).await {
                 panic!("Buffer overflow");
             }
