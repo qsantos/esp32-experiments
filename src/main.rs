@@ -2,10 +2,10 @@
 #![no_main]
 
 use embassy_executor::Spawner;
-use embassy_futures::join::join4;
+use embassy_futures::join::join5;
+use embassy_net;
 use embassy_time::Timer;
-use embassy_usb::class::cdc_acm::{self, CdcAcmClass};
-use embassy_usb::class::hid::{self, HidWriter};
+use embassy_usb::class::cdc_ncm::{self, CdcNcmClass};
 use embassy_usb::driver::EndpointError;
 use esp_hal::delay::Delay;
 use esp_hal::gpio;
@@ -14,7 +14,7 @@ use esp_hal::otg_fs::Usb;
 use esp_hal::uart::{Config, Uart};
 use esp_println::println;
 use gpio::{Level, Output};
-use usbd_hid::descriptor::{KeyboardReport, KeyboardUsage, SerializedDescriptor};
+use static_cell::StaticCell;
 
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
@@ -39,30 +39,6 @@ fn blink(led: &mut Output, times: u32) {
     }
 }
 
-async fn echo_loop<'a>(
-    class: &mut cdc_acm::CdcAcmClass<'a, Driver<'a>>,
-) -> Result<(), EndpointError> {
-    let mut buf = [0; 64];
-    loop {
-        let n = class.read_packet(&mut buf).await?;
-        buf.make_ascii_uppercase();
-        class.write_packet(&buf[..n]).await?;
-    }
-}
-
-#[repr(u8)]
-#[allow(unused)]
-enum KeyboardModifier {
-    LeftControl = 0x01,
-    LeftShift = 0x02,
-    LeftAlt = 0x04,
-    LeftGui = 0x08,
-    RightControl = 0x10,
-    RightShift = 0x20,
-    RightAlt = 0x40,
-    RightGui = 0x80,
-}
-
 #[esp_hal_embassy::main]
 async fn main(_spawner: Spawner) {
     let peripherals = esp_hal::init(Default::default());
@@ -82,9 +58,10 @@ async fn main(_spawner: Spawner) {
     esp_hal_embassy::init(timg0.timer0);
 
     let usb = Usb::new(peripherals.USB0, peripherals.GPIO20, peripherals.GPIO19);
-    let mut driver_buffer = [0; 1024];
+    static DRIVER_BUFFER: StaticCell<[u8; 1024]> = StaticCell::new();
+    let driver_buffer = DRIVER_BUFFER.init([0; 1024]);
     let config = Default::default();
-    let driver = Driver::new(usb, &mut driver_buffer, config);
+    let driver = Driver::new(usb, driver_buffer, config);
 
     let config = {
         let mut config = embassy_usb::Config::new(0xc0de, 0xcafe);
@@ -95,67 +72,78 @@ async fn main(_spawner: Spawner) {
     };
 
     // We need to declare the state before the builder to ensure it is dropped after the builder.
-    let mut echo_state = cdc_acm::State::new();
-    let mut hid_state = hid::State::new();
+    let mut network_state = cdc_ncm::State::new();
+    static ETHERNET_STATE: StaticCell<cdc_ncm::embassy_net::State<1514, 4, 4>> = StaticCell::new();
+    let ethernet_state = ETHERNET_STATE.init(cdc_ncm::embassy_net::State::new());
 
     // Create embassy-usb DeviceBuilder using the driver and config.
     // It needs some buffers for building the descriptors.
-    let mut config_descriptor = [0; 256];
-    let mut bos_descriptor = [0; 256];
-    let mut control_buf = [0; 64];
+    static CONFIG_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
+    static BOS_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
+    static CONTROL_BUF: StaticCell<[u8; 64]> = StaticCell::new();
+    let config_descriptor = CONFIG_DESCRIPTOR.init([0; 256]);
+    let bos_descriptor = BOS_DESCRIPTOR.init([0; 256]);
+    let control_buf = CONTROL_BUF.init([0; 64]);
     let mut builder = embassy_usb::Builder::new(
         driver,
         config,
-        &mut config_descriptor,
-        &mut bos_descriptor,
+        config_descriptor,
+        bos_descriptor,
         &mut [], // no msos descriptors
-        &mut control_buf,
+        control_buf,
     );
 
     // Create classes on the builder.
-    let mut echo_class = CdcAcmClass::new(&mut builder, &mut echo_state, 64);
-    let mut hid_class: HidWriter<_, 16> = HidWriter::new(
-        &mut builder,
-        &mut hid_state,
-        hid::Config {
-            report_descriptor: KeyboardReport::desc(),
-            request_handler: None,
-            poll_ms: 10,
-            max_packet_size: 64,
-        },
-    );
+    let mac_address = [0xcc, 0x8d, 0xa2, 0x8d, 0x9b, 0x14];
+    let network_class = CdcNcmClass::new(&mut builder, &mut network_state, mac_address, 64);
+    let ethernet_address = [0xcc, 0x8d, 0xa2, 0x8d, 0x9b, 0x14];
+    let (network_runner, network_device) =
+        network_class.into_embassy_net_device(ethernet_state, ethernet_address);
 
     // Build the builder.
     let mut usb = builder.build();
 
     // Run the USB device.
     let usb_fut = usb.run();
+    let network_runner_fut = network_runner.run();
 
-    let echo_fut = async {
-        loop {
-            echo_class.wait_connection().await;
-            println!("Connected");
-            if let Err(EndpointError::BufferOverflow) = echo_loop(&mut echo_class).await {
-                panic!("Buffer overflow");
-            }
-            println!("Disconnected");
-        }
+    let network_config = {
+        use embassy_net::{Config, Ipv4Address, Ipv4Cidr, StaticConfigV4};
+        Config::ipv4_static(StaticConfigV4 {
+            address: Ipv4Cidr::new(Ipv4Address::new(192, 168, 1, 2), 24),
+            gateway: None,
+            dns_servers: Default::default(),
+        })
     };
-
-    let hid_fut = async {
+    static NETWORK_RESOURCES: StaticCell<embassy_net::StackResources<3>> = StaticCell::new();
+    let network_resources = NETWORK_RESOURCES.init(embassy_net::StackResources::new());
+    let (stack, mut runner) = embassy_net::new(
+        network_device,
+        network_config,
+        network_resources,
+        0x42424242,
+    );
+    let stack_fut = runner.run();
+    let udp_fut = async {
+        use embassy_net::udp::PacketMetadata;
+        let mut rx_buffer = [0; 10];
+        let mut tx_buffer = [0; 10];
+        let mut rx_meta = [PacketMetadata::EMPTY; 2];
+        let mut tx_meta = [PacketMetadata::EMPTY; 2];
+        let mut socket = embassy_net::udp::UdpSocket::new(
+            stack,
+            &mut rx_meta,
+            &mut rx_buffer,
+            &mut tx_meta,
+            &mut tx_buffer,
+        );
+        socket.bind(0).unwrap();
         loop {
-            // press A
-            let mut report = KeyboardReport::default();
-            //report.keycodes[0] = KeyboardUsage::KeyboardAa as u8;
-            //report.modifier |= KeyboardModifier::LeftShift as u8;
-            if let Err(EndpointError::BufferOverflow) = hid_class.write_serialize(&report).await {
-                panic!("Buffer overflow");
-            }
-            // release A
-            let report = KeyboardReport::default();
-            if let Err(EndpointError::BufferOverflow) = hid_class.write_serialize(&report).await {
-                panic!("Buffer overflow");
-            }
+            let a = embassy_net::Ipv4Address::new(192, 168, 1, 42);
+            println!("Sending datagram!");
+            let res = socket.send_to(b"Hello, World", (a, 4242)).await;
+            println!("{:?}", res);
+            println!("Sent datagram");
             Timer::after_secs(1).await;
         }
     };
@@ -170,5 +158,5 @@ async fn main(_spawner: Spawner) {
         }
     };
 
-    join4(usb_fut, echo_fut, blinker, hid_fut).await;
+    join5(usb_fut, blinker, network_runner_fut, stack_fut, udp_fut).await;
 }
