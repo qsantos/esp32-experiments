@@ -124,17 +124,16 @@ async fn main(_spawner: Spawner) {
     let stack_fut = runner.run();
     let udp_fut = async {
         use embassy_net::udp::PacketMetadata;
-        let mut rx_buffer = [0; 10];
-        let mut tx_buffer = [0; 10];
-        let mut rx_meta = [PacketMetadata::EMPTY; 2];
-        let mut tx_meta = [PacketMetadata::EMPTY; 2];
-        let mut socket = embassy_net::udp::UdpSocket::new(
-            stack,
-            &mut rx_meta,
-            &mut rx_buffer,
-            &mut tx_meta,
-            &mut tx_buffer,
-        );
+        static RX_BUFFER: StaticCell<[u8; 4096]> = StaticCell::new();
+        static TX_BUFFER: StaticCell<[u8; 4096]> = StaticCell::new();
+        static RX_META: StaticCell<[PacketMetadata; 16]> = StaticCell::new();
+        static TX_META: StaticCell<[PacketMetadata; 16]> = StaticCell::new();
+        let rx_buffer = RX_BUFFER.init([0; 4096]);
+        let tx_buffer = TX_BUFFER.init([0; 4096]);
+        let rx_meta = RX_META.init([PacketMetadata::EMPTY; 16]);
+        let tx_meta = TX_META.init([PacketMetadata::EMPTY; 16]);
+        let mut socket =
+            embassy_net::udp::UdpSocket::new(stack, rx_meta, rx_buffer, tx_meta, tx_buffer);
         socket.bind(0).unwrap();
         loop {
             let a = embassy_net::Ipv4Address::new(192, 168, 1, 42);
