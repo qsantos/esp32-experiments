@@ -71,11 +71,6 @@ async fn main(_spawner: Spawner) {
         config
     };
 
-    // We need to declare the state before the builder to ensure it is dropped after the builder.
-    let mut network_state = cdc_ncm::State::new();
-    static ETHERNET_STATE: StaticCell<cdc_ncm::embassy_net::State<1514, 4, 4>> = StaticCell::new();
-    let ethernet_state = ETHERNET_STATE.init(cdc_ncm::embassy_net::State::new());
-
     // Create embassy-usb DeviceBuilder using the driver and config.
     // It needs some buffers for building the descriptors.
     static CONFIG_DESCRIPTOR: StaticCell<[u8; 256]> = StaticCell::new();
@@ -94,17 +89,20 @@ async fn main(_spawner: Spawner) {
     );
 
     // Create classes on the builder.
+    static NETWORK_STATE: StaticCell<cdc_ncm::State> = StaticCell::new();
+    let network_state = NETWORK_STATE.init(cdc_ncm::State::new());
     let mac_address = [0xcc, 0x8d, 0xa2, 0x8d, 0x9b, 0x14];
-    let network_class = CdcNcmClass::new(&mut builder, &mut network_state, mac_address, 64);
-    let ethernet_address = [0xcc, 0x8d, 0xa2, 0x8d, 0x9b, 0x14];
-    let (network_runner, network_device) =
-        network_class.into_embassy_net_device(ethernet_state, ethernet_address);
+    let network_class = CdcNcmClass::new(&mut builder, network_state, mac_address, 64);
 
     // Build the builder.
     let mut usb = builder.build();
-
-    // Run the USB device.
     let usb_fut = usb.run();
+
+    static ETHERNET_STATE: StaticCell<cdc_ncm::embassy_net::State<1514, 4, 4>> = StaticCell::new();
+    let ethernet_state = ETHERNET_STATE.init(cdc_ncm::embassy_net::State::new());
+    let ethernet_address = [0x88, 0x88, 0x88, 0x88, 0x88, 0x88];
+    let (network_runner, network_device) =
+        network_class.into_embassy_net_device(ethernet_state, ethernet_address);
     let network_runner_fut = network_runner.run();
 
     let network_config = {
