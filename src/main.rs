@@ -6,7 +6,6 @@ use embassy_futures::join::join5;
 use embassy_net;
 use embassy_time::Timer;
 use embassy_usb::class::cdc_ncm::{self, CdcNcmClass};
-use embassy_usb::driver::EndpointError;
 use esp_hal::delay::Delay;
 use esp_hal::gpio;
 use esp_hal::otg_fs::asynch::Driver;
