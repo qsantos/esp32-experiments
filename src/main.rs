@@ -2,7 +2,6 @@
 #![no_main]
 
 use embassy_executor::Spawner;
-use embassy_futures::join::join5;
 use embassy_net;
 use embassy_time::Timer;
 use embassy_usb::class::cdc_ncm::{self, CdcNcmClass};
@@ -14,6 +13,11 @@ use esp_hal::uart::{Config, Uart};
 use esp_println::println;
 use gpio::{Level, Output};
 use static_cell::StaticCell;
+
+
+type MyDriver = Driver<'static>;
+
+const MTU: usize = 1514;
 
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
@@ -38,8 +42,23 @@ fn blink(led: &mut Output, times: u32) {
     }
 }
 
+#[embassy_executor::task]
+async fn usb_task(mut device: embassy_usb::UsbDevice<'static, MyDriver>) -> ! {
+    device.run().await
+}
+
+#[embassy_executor::task]
+async fn usb_ncm_task(class: cdc_ncm::embassy_net::Runner<'static, MyDriver, MTU>) -> ! {
+    class.run().await
+}
+
+#[embassy_executor::task]
+async fn net_task(mut runner: embassy_net::Runner<'static, cdc_ncm::embassy_net::Device<'static, MTU>>) -> ! {
+    runner.run().await
+}
+
 #[esp_hal_embassy::main]
-async fn main(_spawner: Spawner) {
+async fn main(spawner: Spawner) {
     let peripherals = esp_hal::init(Default::default());
     // set UART0 first thing, we can send logs and panic messages
     Uart::new(peripherals.UART0, Config::default())
@@ -57,6 +76,7 @@ async fn main(_spawner: Spawner) {
     esp_hal_embassy::init(timg0.timer0);
 
     let usb = Usb::new(peripherals.USB0, peripherals.GPIO20, peripherals.GPIO19);
+
     static DRIVER_BUFFER: StaticCell<[u8; 1024]> = StaticCell::new();
     let driver_buffer = DRIVER_BUFFER.init([0; 1024]);
     let config = Default::default();
@@ -95,14 +115,15 @@ async fn main(_spawner: Spawner) {
 
     // Build the builder.
     let mut usb = builder.build();
-    let usb_fut = usb.run();
+    spawner.spawn(usb_task(usb)).unwrap();
+    Timer::after_secs(1).await;
 
-    static ETHERNET_STATE: StaticCell<cdc_ncm::embassy_net::State<1514, 4, 4>> = StaticCell::new();
+    static ETHERNET_STATE: StaticCell<cdc_ncm::embassy_net::State<MTU, 4, 4>> = StaticCell::new();
     let ethernet_state = ETHERNET_STATE.init(cdc_ncm::embassy_net::State::new());
     let ethernet_address = [0x88, 0x88, 0x88, 0x88, 0x88, 0x88];
     let (network_runner, network_device) =
         network_class.into_embassy_net_device(ethernet_state, ethernet_address);
-    let network_runner_fut = network_runner.run();
+    spawner.spawn(usb_ncm_task(network_runner)).unwrap();
 
     let network_config = {
         use embassy_net::{Config, Ipv4Address, Ipv4Cidr, StaticConfigV4};
@@ -120,39 +141,32 @@ async fn main(_spawner: Spawner) {
         network_resources,
         0x42424242,
     );
-    let stack_fut = runner.run();
-    let udp_fut = async {
-        use embassy_net::udp::PacketMetadata;
-        static RX_BUFFER: StaticCell<[u8; 4096]> = StaticCell::new();
-        static TX_BUFFER: StaticCell<[u8; 4096]> = StaticCell::new();
-        static RX_META: StaticCell<[PacketMetadata; 16]> = StaticCell::new();
-        static TX_META: StaticCell<[PacketMetadata; 16]> = StaticCell::new();
-        let rx_buffer = RX_BUFFER.init([0; 4096]);
-        let tx_buffer = TX_BUFFER.init([0; 4096]);
-        let rx_meta = RX_META.init([PacketMetadata::EMPTY; 16]);
-        let tx_meta = TX_META.init([PacketMetadata::EMPTY; 16]);
-        let mut socket =
-            embassy_net::udp::UdpSocket::new(stack, rx_meta, rx_buffer, tx_meta, tx_buffer);
-        socket.bind(0).unwrap();
-        loop {
+    spawner.spawn(net_task(runner)).unwrap();
+    use embassy_net::udp::PacketMetadata;
+    static RX_BUFFER: StaticCell<[u8; 4096]> = StaticCell::new();
+    static TX_BUFFER: StaticCell<[u8; 4096]> = StaticCell::new();
+    static RX_META: StaticCell<[PacketMetadata; 16]> = StaticCell::new();
+    static TX_META: StaticCell<[PacketMetadata; 16]> = StaticCell::new();
+    let rx_buffer = RX_BUFFER.init([0; 4096]);
+    let tx_buffer = TX_BUFFER.init([0; 4096]);
+    let rx_meta = RX_META.init([PacketMetadata::EMPTY; 16]);
+    let tx_meta = TX_META.init([PacketMetadata::EMPTY; 16]);
+    let mut socket =
+        embassy_net::udp::UdpSocket::new(stack, rx_meta, rx_buffer, tx_meta, tx_buffer);
+    socket.bind(0).unwrap();
+    //static BUFFER: StaticCell<[u8; 200]> = StaticCell::new();
+    //let buf = BUFFER.init([0; 200]);
+    //println!("Waiting for datagram on port {:?}", socket.endpoint());
+    //let (n, addr) = socket.recv_from(buf).await.unwrap();
+    //println!("Received {:?} bytes from {:?}", &buf[..n], addr);
+    loop {
+        if stack.is_link_up() {
             let a = embassy_net::Ipv4Address::new(192, 168, 1, 42);
             println!("Sending datagram!");
-            let res = socket.send_to(b"Hello, World", (a, 4242)).await;
+            let res = socket.send_to(b"Hello, World\n", (a, 4242)).await;
             println!("{:?}", res);
             println!("Sent datagram");
-            Timer::after_secs(1).await;
         }
-    };
-
-    let blinker = async {
-        loop {
-            led.set_high();
-            Timer::after_secs(1).await;
-
-            led.set_low();
-            Timer::after_secs(1).await;
-        }
-    };
-
-    join5(usb_fut, blinker, network_runner_fut, stack_fut, udp_fut).await;
+        Timer::after_secs(1).await;
+    }
 }
