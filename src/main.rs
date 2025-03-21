@@ -114,7 +114,7 @@ async fn main(spawner: Spawner) {
     let network_class = CdcNcmClass::new(&mut builder, network_state, mac_address, 64);
 
     // Build the builder.
-    let mut usb = builder.build();
+    let usb = builder.build();
     spawner.spawn(usb_task(usb)).unwrap();
     Timer::after_secs(1).await;
 
@@ -135,7 +135,7 @@ async fn main(spawner: Spawner) {
     };
     static NETWORK_RESOURCES: StaticCell<embassy_net::StackResources<3>> = StaticCell::new();
     let network_resources = NETWORK_RESOURCES.init(embassy_net::StackResources::new());
-    let (stack, mut runner) = embassy_net::new(
+    let (stack, runner) = embassy_net::new(
         network_device,
         network_config,
         network_resources,
