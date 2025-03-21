@@ -14,7 +14,6 @@ use esp_println::println;
 use gpio::{Level, Output};
 use static_cell::StaticCell;
 
-
 type MyDriver = Driver<'static>;
 
 const MTU: usize = 1514;
@@ -53,7 +52,9 @@ async fn usb_ncm_task(class: cdc_ncm::embassy_net::Runner<'static, MyDriver, MTU
 }
 
 #[embassy_executor::task]
-async fn net_task(mut runner: embassy_net::Runner<'static, cdc_ncm::embassy_net::Device<'static, MTU>>) -> ! {
+async fn net_task(
+    mut runner: embassy_net::Runner<'static, cdc_ncm::embassy_net::Device<'static, MTU>>,
+) -> ! {
     runner.run().await
 }
 
