@@ -2,7 +2,6 @@
 #![no_main]
 
 use embassy_executor::Spawner;
-use embassy_net;
 use embassy_time::Timer;
 use embassy_usb::class::cdc_ncm::{self, CdcNcmClass};
 use esp_hal::delay::Delay;
