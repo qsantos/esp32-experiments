@@ -155,12 +155,12 @@ async fn main(spawner: Spawner) {
     let tx_meta = TX_META.init([PacketMetadata::EMPTY; 16]);
     let mut socket =
         embassy_net::udp::UdpSocket::new(stack, rx_meta, rx_buffer, tx_meta, tx_buffer);
-    socket.bind(0).unwrap();
-    //static BUFFER: StaticCell<[u8; 200]> = StaticCell::new();
-    //let buf = BUFFER.init([0; 200]);
-    //println!("Waiting for datagram on port {:?}", socket.endpoint());
-    //let (n, addr) = socket.recv_from(buf).await.unwrap();
-    //println!("Received {:?} bytes from {:?}", &buf[..n], addr);
+    socket.bind(67).unwrap();
+    static BUFFER: StaticCell<[u8; 2048]> = StaticCell::new();
+    let buf = BUFFER.init([0; 2048]);
+    println!("Waiting for datagram on port {:?}", socket.endpoint());
+    let (n, addr) = socket.recv_from(buf).await.unwrap();
+    println!("Received {:?} from {:?}", &buf[..n], addr);
     loop {
         if stack.is_link_up() {
             let a = embassy_net::Ipv4Address::new(192, 168, 1, 42);
