@@ -3,7 +3,7 @@ runner = "espflash flash --chip=esp32s2 --before=no-reset --no-stub --port=/dev/
 
 [env]
 ESP_LOG="INFO"
-EMBASSY_EXECUTOR_TASK_ARENA_SIZE="8192"
+EMBASSY_EXECUTOR_TASK_ARENA_SIZE="16384"
 
 [build]
 rustflags = [

@@ -57,6 +57,27 @@ async fn net_task(
     runner.run().await
 }
 
+
+#[embassy_executor::task]
+async fn dhcp_server(stack: embassy_net::Stack<'static>) {
+    use core::net::Ipv4Addr;
+    let me = Ipv4Addr::new(192, 168, 2, 1);
+    let mask = Ipv4Addr::new(255, 255, 255, 0);
+    let config = esp_hal_dhcp_server::structs::DhcpServerConfig {
+        ip: me,
+        lease_time: embassy_time::Duration::from_secs(3600),
+        gateways: &[me],
+        subnet: Some(mask),
+        dns: &[me],
+    };
+    let mut leaser = esp_hal_dhcp_server::simple_leaser::SimpleDhcpLeaser {
+        start: Ipv4Addr::new(192, 168, 2, 50),
+        end: Ipv4Addr::new(192, 168, 2, 200),
+        leases: Default::default(),
+    };
+    esp_hal_dhcp_server::run_dhcp_server(stack, config, &mut leaser).await.unwrap();
+}
+
 #[esp_hal_embassy::main]
 async fn main(spawner: Spawner) {
     let peripherals = esp_hal::init(Default::default());
@@ -130,7 +151,7 @@ async fn main(spawner: Spawner) {
     let network_config = {
         use embassy_net::{Config, Ipv4Address, Ipv4Cidr, StaticConfigV4};
         Config::ipv4_static(StaticConfigV4 {
-            address: Ipv4Cidr::new(Ipv4Address::new(192, 168, 1, 2), 24),
+            address: Ipv4Cidr::new(Ipv4Address::new(192, 168, 2, 1), 24),
             gateway: None,
             dns_servers: Default::default(),
         })
@@ -144,6 +165,11 @@ async fn main(spawner: Spawner) {
         0x42424242,
     );
     spawner.spawn(net_task(runner)).unwrap();
+    Timer::after_secs(1).await;
+
+    spawner.spawn(dhcp_server(stack)).unwrap();
+    Timer::after_secs(1).await;
+
     use embassy_net::udp::PacketMetadata;
     static RX_BUFFER: StaticCell<[u8; 4096]> = StaticCell::new();
     static TX_BUFFER: StaticCell<[u8; 4096]> = StaticCell::new();
@@ -155,15 +181,10 @@ async fn main(spawner: Spawner) {
     let tx_meta = TX_META.init([PacketMetadata::EMPTY; 16]);
     let mut socket =
         embassy_net::udp::UdpSocket::new(stack, rx_meta, rx_buffer, tx_meta, tx_buffer);
-    socket.bind(67).unwrap();
-    static BUFFER: StaticCell<[u8; 2048]> = StaticCell::new();
-    let buf = BUFFER.init([0; 2048]);
-    println!("Waiting for datagram on port {:?}", socket.endpoint());
-    let (n, addr) = socket.recv_from(buf).await.unwrap();
-    println!("Received {:?} from {:?}", &buf[..n], addr);
+    socket.bind(0).unwrap();
     loop {
         if stack.is_link_up() {
-            let a = embassy_net::Ipv4Address::new(192, 168, 1, 42);
+            let a = embassy_net::Ipv4Address::new(192, 168, 2, 50);
             println!("Sending datagram!");
             let res = socket.send_to(b"Hello, World\n", (a, 4242)).await;
             println!("{:?}", res);
