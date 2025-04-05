@@ -69,6 +69,7 @@ async fn dhcp_server(stack: embassy_net::Stack<'static>) {
         gateways: &[me],
         subnet: Some(mask),
         dns: &[me],
+        use_captive_portal: false,
     };
     let mut leaser = esp_hal_dhcp_server::simple_leaser::SimpleDhcpLeaser {
         start: Ipv4Addr::new(192, 168, 2, 50),
