@@ -138,8 +138,10 @@ async fn main(spawner: Spawner) {
     // Build the builder.
     let usb = builder.build();
     spawner.spawn(usb_task(usb)).unwrap();
+
     // Without this delay, the CDC-NCM stacks gets stuck for some reason. I have not found the
     // reason why, and will probably need JTAG to debug it properly. For now, it will do.
+    // TODO: Make it work without this delay.
     Timer::after_secs(1).await;
 
     static ETHERNET_STATE: StaticCell<cdc_ncm::embassy_net::State<MTU, 4, 4>> = StaticCell::new();
